@@ -1,0 +1,16 @@
+# Virtual Environments
+.venv/
+venv/
+ENV/
+
+# Python caching units
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Local User Media Assets (Prevents tracking massive video files)
+static/media/
+
+# System Environment Noise
+.DS_Store
+Thumbs.db

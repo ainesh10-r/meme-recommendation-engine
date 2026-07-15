@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Personalized Meme Feed</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #0f172a; /* Unified Modern Dark Slate Theme */
+            color: #f8fafc;
+            font-family: system-ui, -apple-system, sans-serif;
+            transition: all 0.3s ease-in-out;
+        }
+        .meme-card {
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .meme-card:hover {
+            transform: scale(1.02);
+            box-shadow: 0 10px 25px -5px rgba(99, 102, 241, 0.3);
+        }
+        .loading-spinner {
+            border: 4px solid rgba(255, 255, 255, 0.1);
+            border-top: 4px solid #6366f1;
+            border-radius: 50%;
+            width: 48px;
+            height: 48px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8 min-h-screen">
+    <div class="max-w-6xl mx-auto">
+        <header class="text-center mb-12">
+            <h1 class="text-5xl md:text-6xl font-black tracking-tight text-white mb-2">Meme Recs</h1>
+            <p class="text-lg text-slate-400 font-light">Your daily dose of personalized humor</p>
+        </header>
+
+        <main class="flex flex-col items-center justify-center min-h-[50vh] mb-12">
+            <div id="loading" class="flex flex-col items-center justify-center p-8 bg-slate-800 rounded-2xl border border-slate-700">
+                <div class="loading-spinner mb-4"></div>
+                <p class="text-slate-400">Loading metrics from engine...</p>
+            </div>
+            
+            <div id="currentMemeContainer" class="hidden bg-slate-800 border border-slate-700 rounded-3xl shadow-xl p-6 flex flex-col items-center max-w-xl w-full">
+                <h2 id="currentMemeTitle" class="text-2xl font-bold mb-4 text-center text-white"></h2>
+                <div id="currentMedia" class="w-full min-h-[300px] flex items-center justify-center bg-slate-900 rounded-xl mb-6 overflow-hidden">
+                    </div>
+                <div class="flex space-x-4 w-full">
+                    <button id="likeButton" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-xl transition shadow-lg shadow-indigo-600/20">
+                        👍 Like
+                    </button>
+                    <button id="skipButton" class="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 px-6 rounded-xl transition">
+                        ⏭️ Skip
+                    </button>
+                </div>
+            </div>
+        </main>
+        
+        <section>
+            <h2 class="text-2xl font-bold text-slate-200 mb-6 px-2">Recommended for You</h2>
+            <div id="recommendedMemesGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+        </section>
+    </div>
+
+    <script>
+        const BACKEND_URL = "http://127.0.0.1:5000/";
+        const USER_ID = "test_user_1";
+
+        const loadingSpinner = document.getElementById('loading');
+        const currentMemeContainer = document.getElementById('currentMemeContainer');
+        const currentMemeTitle = document.getElementById('currentMemeTitle');
+        const currentMediaContainer = document.getElementById('currentMedia');
+        const likeButton = document.getElementById('likeButton');
+        const skipButton = document.getElementById('skipButton');
+        const recommendedMemesGrid = document.getElementById('recommendedMemesGrid');
+
+        let allMemes = [];
+        let currentMemeIndex = -1;
+        let lastInteractionTime = 0;
+
+        // Clean operational pipeline sequence using async/await flow correctly
+        async function initializeApp() {
+            try {
+                const response = await fetch(`${BACKEND_URL}api/memes`);
+                allMemes = await response.json();
+                await fetchRecommendations();
+            } catch (error) {
+                console.error("Initialization error:", error);
+                loadingSpinner.innerHTML = `<p class="text-red-400 text-center p-4">Failed to connect to backend engine.<br><span class="text-xs text-slate-500">Run 'python app.py' inside your terminal profile.</span></p>`;
+            }
+        }
+
+        async function fetchRecommendations() {
+            try {
+                const response = await fetch(`${BACKEND_URL}api/recommendations/${USER_ID}`);
+                const data = await response.json();
+                
+                if (data.recommendations && data.recommendations.length > 0) {
+                    displayMeme(data.recommendations[0]);
+                    updateRecommendedMemesGrid(data.recommendations.slice(1));
+                } else {
+                    displayMeme(allMemes[0]);
+                }
+                
+                loadingSpinner.classList.add('hidden');
+                currentMemeContainer.classList.remove('hidden');
+            } catch (error) {
+                console.error("Error computing recommendation layers:", error);
+                if(allMemes.length > 0) {
+                    const randomMeme = allMemes[Math.floor(Math.random() * allMemes.length)];
+                    displayMeme(randomMeme);
+                }
+            }
+        }
+
+        async function postInteraction(action, memeId) {
+            try {
+                await fetch(`${BACKEND_URL}api/interact`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: USER_ID, meme_id: memeId, action: action })
+                });
+            } catch (error) {
+                console.error("Telemetry failed:", error);
+            }
+        }
+
+        function displayMeme(meme) {
+            if (!meme) return;
+            currentMemeIndex = allMemes.findIndex(m => m.id === meme.id);
+            currentMemeTitle.textContent = meme.title;
+            currentMediaContainer.innerHTML = '';
+            
+            const elementTag = meme.type === 'video' ? 'video' : 'img';
+            const media = document.createElement(elementTag);
+            media.src = meme.url;
+            media.className = "max-w-full max-h-[450px] w-auto h-auto rounded-lg object-contain";
+            
+            if (meme.type === 'video') {
+                media.controls = true;
+                media.autoplay = true;
+                media.loop = true;
+                media.muted = true;
+            } else {
+                media.alt = meme.title;
+            }
+            
+            currentMediaContainer.appendChild(media);
+            lastInteractionTime = Date.now();
+        }
+
+        function updateRecommendedMemesGrid(recommendations) {
+            recommendedMemesGrid.innerHTML = '';
+            recommendations.forEach(meme => {
+                const card = document.createElement('div');
+                card.className = "meme-card bg-slate-800 border border-slate-700/50 rounded-xl p-4 cursor-pointer flex flex-col justify-between";
+                
+                const mediaMarkup = meme.type === 'video' 
+                    ? `<video src="${meme.url}" class="w-full h-48 rounded-lg object-cover mb-3 bg-slate-900" muted autoplay loop></video>`
+                    : `<img src="${meme.url}" alt="${meme.title}" class="w-full h-48 rounded-lg object-cover mb-3 bg-slate-900">`;
+
+                card.innerHTML = `
+                    <div>
+                        ${mediaMarkup}
+                        <h3 class="text-lg font-bold text-white mb-2 line-clamp-1">${meme.title}</h3>
+                    </div>
+                    <div class="flex flex-wrap gap-1.5 mt-2">
+                        ${meme.tags.map(tag => `<span class="bg-slate-700 text-slate-300 text-xs font-medium rounded-md px-2.5 py-0.5">#${tag}</span>`).join('')}
+                    </div>
+                `;
+                card.onclick = () => displayMeme(meme);
+                recommendedMemesGrid.appendChild(card);
+            });
+        }
+
+        async function handleInteraction(action) {
+            const currentMeme = allMemes[currentMemeIndex];
+            if (!currentMeme) return;
+
+            const watchTime = (Date.now() - lastInteractionTime) / 1000;
+            
+            // Batched sequential execution logic
+            if (watchTime > 2) {
+                await postInteraction("watch", currentMeme.id);
+            }
+            if (action !== "watch") {
+                await postInteraction(action, currentMeme.id);
+            }
+            
+            fetchRecommendations();
+        }
+
+        likeButton.addEventListener('click', () => handleInteraction('like'));
+        skipButton.addEventListener('click', () => handleInteraction('skip'));
+
+        // Fire correct sequential loader entry point
+        initializeApp();
+    </script>
+</body>
+</html>
